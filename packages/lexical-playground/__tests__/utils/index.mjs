@@ -6,9 +6,10 @@
  *
  */
 
-import {expect, test as base} from '@playwright/test';
+import {chromium, expect, test as base} from '@playwright/test';
 import * as glob from 'glob';
 import {randomUUID} from 'node:crypto';
+import path from 'path';
 import prettier from 'prettier';
 import {URLSearchParams} from 'url';
 
@@ -140,6 +141,47 @@ async function exposeLexicalEditor(page) {
 }
 
 export const test = base.extend({
+  backgroundPage: async ({context}, use) => {
+    // for manifest v2:
+    // let [background] = context.backgroundPages()
+    // if (!background) {
+    //   background = await context.waitForEvent('backgroundpage');
+    // }
+
+    // for manifest v3:
+    let [background] = context.serviceWorkers();
+    if (!background) {
+      background = await context.waitForEvent('serviceworker');
+    }
+
+    await use(background);
+  },
+  context: async ({}, use) => {
+    const pathToExtension = path.resolve(
+      './packages/lexical-devtools/.output/chrome-mv3',
+    );
+    const context = await chromium.launchPersistentContext('', {
+      // https://peter.sh/experiments/chromium-command-line-switches/
+      args: [
+        // `--headless=new`,
+        `--disable-extensions-except=${pathToExtension}`,
+        `--load-extension=${pathToExtension}`,
+        '--allow-external-pages',
+        '--browser',
+        '--debug-devtools',
+        '--expose-internals-for-testing',
+        '--enable-automation',
+      ],
+      devtools: true,
+      headless: false,
+    });
+    await use(context);
+    await context.close();
+  },
+  extensionId: async ({backgroundPage}, use) => {
+    const extensionId = backgroundPage.url().split('/')[2];
+    await use(extensionId);
+  },
   isCharLimit: false,
   isCharLimitUtf8: false,
   isCollab: IS_COLLAB,
@@ -301,7 +343,7 @@ async function assertSelectionOnPageOrFrame(page, expected) {
     const rootElement = document.querySelector('div[contenteditable="true"]');
 
     const getPathFromNode = (node) => {
-      const path = [];
+      const pathNode = [];
       if (node === rootElement) {
         return [];
       }
@@ -310,10 +352,10 @@ async function assertSelectionOnPageOrFrame(page, expected) {
         if (parent === null || node === rootElement) {
           break;
         }
-        path.push(Array.from(parent.childNodes).indexOf(node));
+        pathNode.push(Array.from(parent.childNodes).indexOf(node));
         node = parent;
       }
-      return path.reverse();
+      return pathNode.reverse();
     };
 
     const {anchorNode, anchorOffset, focusNode, focusOffset} =

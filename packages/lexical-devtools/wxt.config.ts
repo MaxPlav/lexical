@@ -51,7 +51,7 @@ export default defineConfig({
         48: '/icon/48.png',
       },
       name: 'Lexical Developer Tools',
-      permissions: ['tabs', 'storage'],
+      permissions: ['tabs', 'storage', 'debugger'],
       version: version + `.${buildVersion}`,
       web_accessible_resources: [
         {
@@ -102,6 +102,9 @@ export default defineConfig({
   },
   srcDir: './src',
   vite: (configEnv) => ({
+    build: {
+      minify: false,
+    },
     define: {
       __DEV__: configEnv.mode === 'development',
     },
